@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>term-card</title>
+    <!--
+      Hyperframes composition: the one overlay this demo ships — a term, its
+      pronunciation, and its meaning, animated in and out over the live video.
+
+      The GSAP timeline is created PAUSED and registered on window.__timelines;
+      <hyperframes-player> drives it. Content comes from the query string
+      (?term=&reading=&meaning=) rather than postMessage: the player hosts this
+      page in a sandboxed iframe, and reading location.search sidesteps every
+      parent/child handshake race. The client builds the URL, so a new term is
+      just a new src.
+    -->
+    <!--
+      GSAP is vendored locally, not pulled from a CDN. The player probes the
+      iframe for window.__timelines and, if it hasn't appeared after a few
+      attempts, falls back to a degraded path — a slow external script fetch is
+      enough to trip that, so the timeline must register synchronously on first
+      load. A local file guarantees it.
+    -->
+    <script src="./vendor/gsap.min.js"></script>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        /* Transparent: the avatar's WebRTC video shows through underneath.
+           color-scheme MUST match the host page's (dark, web/index.html):
+           Chrome paints an opaque base behind an iframe whose used color
+           scheme differs from its embedder's, so a composition on the default
+           scheme renders as a white sheet over the avatar no matter how
+           transparent its background is. */
+        color-scheme: dark;
+        background: transparent;
+        font-family: -apple-system, system-ui, "Helvetica Neue", sans-serif;
+      }
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+      }
+      /* Lower-left. The bottom-right quadrant stays empty — that is where the
+         avatar sits when the layout is "pip". */
+      #card {
+        position: absolute;
+        left: 96px;
+        bottom: 110px;
+        max-width: 1200px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 34px 54px 38px;
+        border-radius: 26px;
+        background: linear-gradient(135deg, rgba(14, 16, 24, 0.9), rgba(30, 36, 58, 0.86));
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+      }
+      /* Accent bar wipes in before the text — the beat that reads as broadcast. */
+      #accent {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 10px;
+        border-radius: 26px 0 0 26px;
+        background: linear-gradient(180deg, #6ea8ff, #b98cff);
+        transform-origin: bottom center;
+      }
+      #term {
+        font-size: 104px;
+        font-weight: 700;
+        line-height: 1.02;
+        color: #fff;
+        letter-spacing: -0.5px;
+      }
+      #reading {
+        font-size: 44px;
+        font-weight: 500;
+        color: #a9c8ff;
+      }
+      #meaning {
+        font-size: 38px;
+        color: #d7dbe6;
+      }
+      .empty {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="term-card" data-start="0" data-duration="8" data-width="1920" data-height="1080">
+      <div id="card">
+        <div id="accent"></div>
+        <div id="term"></div>
+        <div id="reading"></div>
+        <div id="meaning"></div>
+      </div>
+    </div>
+
+    <script>
+      const COMPOSITION_ID = "term-card";
+      const DURATION = 8;
+
+      // Content from the query string. textContent, never innerHTML — the
+      // values originate from a model, so they are untrusted markup.
+      const params = new URLSearchParams(location.search);
+      for (const id of ["term", "reading", "meaning"]) {
+        const el = document.getElementById(id);
+        const value = (params.get(id) || "").trim();
+        el.textContent = value;
+        // Collapse unused lines so a term-only card isn't padded by empty rows.
+        if (!value) el.classList.add("empty");
+      }
+
+      const tl = gsap.timeline({ paused: true });
+
+      tl.from("#card", { opacity: 0, x: -70, duration: 0.55, ease: "power3.out" }, 0)
+        .from("#accent", { scaleY: 0, duration: 0.45, ease: "power2.out" }, 0.1)
+        .from("#term", { opacity: 0, y: 26, duration: 0.45, ease: "power2.out" }, 0.22)
+        .from("#reading:not(.empty)", { opacity: 0, y: 18, duration: 0.4, ease: "power2.out" }, 0.34)
+        .from("#meaning:not(.empty)", { opacity: 0, y: 18, duration: 0.4, ease: "power2.out" }, 0.44)
+        // Hold, then exit. Total length is pinned to DURATION so the player's
+        // reported duration matches data-duration on the root.
+        .to("#card", { opacity: 0, x: -40, duration: 0.5, ease: "power2.in" }, DURATION - 0.5);
+
+      // Registered synchronously — nothing async may run before this line, or
+      // the player's probe misses it.
+      window.__timelines = window.__timelines || {};
+      window.__timelines[COMPOSITION_ID] = tl;
+    </script>
+  </body>
+</html>

@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>learned-words</title>
+    <!--
+      Hyperframes composition: the recap panel — every word taught so far,
+      staggered in one by one. While it plays, the client shrinks the avatar to
+      the bottom-right corner (data-pip on #stage), so the panel keeps that
+      quadrant clear.
+
+      Content arrives in the query string: ?title=...&words=<JSON array of
+      {term, reading?, meaning?}>. Parsed defensively and rendered with
+      textContent only — the values originate from a model.
+
+      Duration follows content: more words hold longer. It is computed BEFORE
+      the root's data-duration is read, and the timeline is registered
+      synchronously — the player probes for window.__timelines on load and
+      falls back to a degraded path if it is not there yet (which is also why
+      GSAP is vendored locally instead of fetched from a CDN).
+    -->
+    <script src="./vendor/gsap.min.js"></script>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        /* Transparent: the avatar's PiP video shows through at bottom-right.
+           color-scheme MUST match the host page's (dark, web/index.html) —
+           a mismatch makes Chrome paint an opaque white canvas behind the
+           iframe. See term-card.html. */
+        color-scheme: dark;
+        background: transparent;
+        font-family: -apple-system, system-ui, "Helvetica Neue", sans-serif;
+      }
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+      }
+      /* Left ~two-thirds of the frame. The bottom-right quadrant stays empty —
+         that is where the client parks the avatar. */
+      #panel {
+        position: absolute;
+        left: 96px;
+        top: 90px;
+        bottom: 90px;
+        width: 1180px;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        padding: 48px 60px;
+        border-radius: 30px;
+        background: linear-gradient(135deg, rgba(14, 16, 24, 0.92), rgba(30, 36, 58, 0.88));
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+      }
+      #title {
+        font-size: 56px;
+        font-weight: 700;
+        color: #fff;
+        letter-spacing: -0.5px;
+        margin-bottom: 34px;
+      }
+      #words {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        overflow: hidden;
+      }
+      .word {
+        display: flex;
+        align-items: baseline;
+        gap: 28px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+      }
+      .term {
+        font-size: 54px;
+        font-weight: 700;
+        color: #fff;
+        min-width: 320px;
+      }
+      .reading {
+        font-size: 32px;
+        font-weight: 500;
+        color: #a9c8ff;
+      }
+      .meaning {
+        font-size: 30px;
+        color: #d7dbe6;
+        margin-left: auto;
+        text-align: right;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="learned-words" data-start="0" data-duration="10" data-width="1920" data-height="1080">
+      <div id="panel">
+        <div id="title"></div>
+        <div id="words"></div>
+      </div>
+    </div>
+
+    <script>
+      const COMPOSITION_ID = "learned-words";
+      const MAX_WORDS = 12;
+
+      const params = new URLSearchParams(location.search);
+      document.getElementById("title").textContent = (params.get("title") || "Words so far").trim();
+
+      // The word list is one JSON param. Anything malformed renders as an
+      // empty panel rather than throwing — a broken recap must not take the
+      // player down with it.
+      let words = [];
+      try {
+        const parsed = JSON.parse(params.get("words") || "[]");
+        if (Array.isArray(parsed)) words = parsed.slice(0, MAX_WORDS);
+      } catch {
+        /* empty list */
+      }
+
+      const wordsEl = document.getElementById("words");
+      for (const word of words) {
+        if (!word || typeof word.term !== "string") continue;
+        const row = document.createElement("div");
+        row.className = "word";
+        for (const [key, cls] of [["term", "term"], ["reading", "reading"], ["meaning", "meaning"]]) {
+          const value = typeof word[key] === "string" ? word[key].trim() : "";
+          if (!value && key !== "term") continue;
+          const cell = document.createElement("div");
+          cell.className = cls;
+          cell.textContent = value; // model-supplied: textContent, never innerHTML
+          row.appendChild(cell);
+        }
+        wordsEl.appendChild(row);
+      }
+
+      // Duration follows content: reading a list of eight takes longer than
+      // three. Written to data-duration before registration so the player
+      // reports the real length.
+      const DURATION = Math.min(22, 8 + wordsEl.children.length * 1.2);
+      document.getElementById("root").dataset.duration = String(DURATION);
+
+      const tl = gsap.timeline({ paused: true });
+      tl.from("#panel", { opacity: 0, y: 40, duration: 0.55, ease: "power3.out" }, 0)
+        .from("#title", { opacity: 0, y: 20, duration: 0.4, ease: "power2.out" }, 0.15);
+      if (wordsEl.children.length > 0) {
+        tl.from(
+          "#words .word",
+          { opacity: 0, x: -40, duration: 0.4, ease: "power2.out", stagger: 0.12 },
+          0.3,
+        );
+      }
+      // Hold, then exit, ending exactly at DURATION.
+      tl.to("#panel", { opacity: 0, y: 24, duration: 0.5, ease: "power2.in" }, DURATION - 0.5);
+
+      // Registered synchronously — nothing async may run before this line.
+      window.__timelines = window.__timelines || {};
+      window.__timelines[COMPOSITION_ID] = tl;
+    </script>
+  </body>
+</html>
