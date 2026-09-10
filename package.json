@@ -1,0 +1,22 @@
+{
+  "name": "liveavatar-language-demo",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/heygen-com/liveavatar-language-demo.git"
+  },
+  "description": "Customer support reference integration: OpenAI GPT-Live driving a HeyGen LiveAvatar, answering from a markdown knowledge base with server-owned pricing, mode comparison, and support hand-off panels on screen.",
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "dev": "node scripts/check-env.mjs && pnpm --parallel -r dev",
+    "build": "pnpm -r build",
+    "start": "node scripts/check-env.mjs && pnpm --filter server start",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "engines": {
+    "node": ">=20.12"
+  },
+  "packageManager": "pnpm@9.0.0"
+}

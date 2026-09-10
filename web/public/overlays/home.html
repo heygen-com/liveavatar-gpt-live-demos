@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>home</title>
+    <!--
+      Hyperframes composition: the resting state of the stage. Plays in its
+      own persistent player (#home-player, web/index.html) from the moment the
+      avatar's first frame lands, and is faded out by the host page while any
+      card is up (data-card on #stage) — so it never fights a panel.
+
+      Layout keeps the centre of the frame clear for the avatar's face: the
+      banner hugs the top edge, the prompt chips run along the bottom.
+
+      No content arrives in the query string — the copy is fixed here. The
+      timeline is an intro followed by a slow idle drift on the chips; the
+      player runs it with `loop`, so the duration only sets how often the
+      intro replays.
+    -->
+    <script src="./vendor/gsap.min.js"></script>
+    <style>
+      /* Palette from liveavatar.com tokens: page #F7F8FA · accent #00C3FF ·
+         ink (eden) #0E404F · secondary #6B7280 · muted #818999 · edge #E3E6E9 */
+      html,
+      body {
+        margin: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        /* Transparent: the avatar shows through. color-scheme MUST match the
+           host page (light) or Chrome paints an opaque canvas behind the iframe. */
+        color-scheme: light;
+        background: transparent;
+        font-family: -apple-system, system-ui, "Helvetica Neue", sans-serif;
+      }
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+      }
+      #banner {
+        position: absolute;
+        top: 64px;
+        left: 0;
+        right: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+      }
+      #eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 22px;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #818999;
+        text-shadow: 0 1px 12px rgba(255, 255, 255, 0.9);
+      }
+      #eyebrow .dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #00c3ff;
+        box-shadow: 0 0 18px rgba(0, 195, 255, 0.7);
+      }
+      #title {
+        margin-top: 14px;
+        font-size: 84px;
+        font-weight: 700;
+        letter-spacing: -1.5px;
+        color: #0e404f;
+        line-height: 1;
+        /* No backing wash: a soft shadow keeps the type legible over footage. */
+        text-shadow: 0 2px 24px rgba(255, 255, 255, 0.85);
+      }
+      #title em {
+        font-style: normal;
+        color: #00c3ff;
+      }
+      #chips {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 72px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 22px;
+      }
+      #hint {
+        font-size: 24px;
+        font-weight: 500;
+        color: #6b7280;
+        letter-spacing: 0.02em;
+        text-shadow: 0 1px 12px rgba(255, 255, 255, 0.9);
+      }
+      #row {
+        display: flex;
+        gap: 22px;
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 16px;
+        padding: 20px 34px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.92);
+        border: 2px solid #e3e6e9;
+        box-shadow: 0 14px 40px rgba(15, 44, 63, 0.16);
+        font-size: 32px;
+        font-weight: 600;
+        color: #0e404f;
+        white-space: nowrap;
+      }
+      .chip .ico {
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #dff8ff;
+        color: #00c3ff;
+        font-size: 22px;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="home" data-start="0" data-duration="600" data-width="1920" data-height="1080">
+      <div id="banner">
+        <div id="eyebrow"><span class="dot"></span><span>LiveAvatar support</span></div>
+        <div id="title">Ask me <em>anything</em></div>
+      </div>
+      <div id="chips">
+        <div id="hint">Try asking about</div>
+        <div id="row">
+          <div class="chip"><span class="ico">★</span>Key features</div>
+          <div class="chip"><span class="ico">$</span>Pricing</div>
+          <div class="chip"><span class="ico">◆</span>Enterprise</div>
+          <div class="chip"><span class="ico">✎</span>Customization</div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const COMPOSITION_ID = "home";
+
+      const tl = gsap.timeline({ paused: true });
+      tl.from("#eyebrow", { opacity: 0, y: -16, duration: 0.5, ease: "power2.out" }, 0.2)
+        .from("#title", { opacity: 0, y: 24, duration: 0.6, ease: "power3.out" }, 0.35)
+        .from("#hint", { opacity: 0, y: 12, duration: 0.4, ease: "power2.out" }, 0.7)
+        .from(
+          "#row .chip",
+          { opacity: 0, y: 30, scale: 0.94, duration: 0.5, ease: "back.out(1.6)", stagger: 0.12 },
+          0.85,
+        );
+
+      // Idle: a slow drift on the chips and a breathing dot, so the resting
+      // frame never reads as a still. Nested repeats seek correctly inside the
+      // paused master timeline.
+      tl.to(
+        "#row .chip",
+        { y: -8, duration: 2.2, ease: "sine.inOut", yoyo: true, repeat: -1, stagger: { each: 0.35, repeat: -1, yoyo: true } },
+        1.6,
+      );
+      tl.to("#eyebrow .dot", { scale: 1.35, opacity: 0.6, duration: 1.1, ease: "sine.inOut", yoyo: true, repeat: -1 }, 1.6);
+      // Pin the timeline's length: repeat: -1 tweens are infinite, so the
+      // player's duration comes from data-duration and this marker.
+      tl.set({}, {}, 600);
+
+      // Registered synchronously — nothing async may run before this line.
+      window.__timelines = window.__timelines || {};
+      window.__timelines[COMPOSITION_ID] = tl;
+    </script>
+  </body>
+</html>

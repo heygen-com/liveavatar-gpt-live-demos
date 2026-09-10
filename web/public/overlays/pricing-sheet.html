@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>pricing-sheet</title>
+    <!--
+      Hyperframes composition: the pricing sheet — each plan row staggered in
+      one by one. While it plays, the client shrinks the avatar to the
+      bottom-right corner (data-pip on #stage), so the panel keeps that
+      quadrant clear.
+
+      Content arrives in the query string: ?title=...&rows=<JSON array of
+      {plan, price, detail?}>&footnote=... Parsed defensively and rendered with
+      textContent only — the title originates from a model.
+
+      Duration follows content: more rows hold longer. It is computed BEFORE
+      the root's data-duration is read, and the timeline is registered
+      synchronously — the player probes for window.__timelines on load and
+      falls back to a degraded path if it is not there yet (which is also why
+      GSAP is vendored locally instead of fetched from a CDN).
+    -->
+    <script src="./vendor/gsap.min.js"></script>
+    <style>
+      /* Palette lifted from liveavatar.com tokens: page #F7F8FA · pale
+         panel #DFF8FF · accent cyan #00C3FF · ink (eden) #0E404F · secondary
+         #6B7280 · muted #818999 · edge #E3E6E9 · chip #F2F4F6 */
+      html,
+      body {
+        margin: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        /* Transparent: the avatar's PiP video shows through at bottom-right.
+           color-scheme MUST match the host page's (light, web/index.html) —
+           a mismatch makes Chrome paint an opaque canvas behind the iframe. */
+        color-scheme: light;
+        background: transparent;
+        font-family: -apple-system, system-ui, "Helvetica Neue", sans-serif;
+      }
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+      }
+      /* Left ~two-thirds of the frame. The bottom-right quadrant stays empty —
+         that is where the client parks the avatar. */
+      #panel {
+        position: absolute;
+        left: 96px;
+        top: 90px;
+        bottom: 90px;
+        width: 1180px;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        padding: 48px 60px;
+        border-radius: 30px;
+        overflow: hidden;
+        /* Site hero treatment: soft cyan glow centered in the panel. */
+        background: radial-gradient(ellipse 80% 75% at 50% 62%, rgba(0, 195, 255, 0.32) 0%, rgba(0, 195, 255, 0.1) 55%, transparent 100%), #f7f8fa;
+        border: 1px solid #e3e6e9;
+        box-shadow: 0 24px 70px rgba(15, 44, 63, 0.35);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+      }
+      #title {
+        font-size: 56px;
+        font-weight: 700;
+        color: #0e404f;
+        letter-spacing: -0.5px;
+        margin-bottom: 34px;
+      }
+      #rows {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        overflow: hidden;
+      }
+      /* Each plan is a white tile on the off-white panel. */
+      .row {
+        padding: 22px 28px;
+        border-radius: 18px;
+        /* Translucent so the panel glow reads through the tiles. */
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid rgba(255, 255, 255, 0.9);
+        box-shadow: 0 6px 18px rgba(15, 44, 63, 0.06);
+      }
+      .top {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 28px;
+      }
+      .plan {
+        font-size: 46px;
+        font-weight: 700;
+        color: #0e404f;
+      }
+      .price {
+        font-size: 42px;
+        font-weight: 700;
+        color: #00c3ff;
+        white-space: nowrap;
+      }
+      .detail {
+        font-size: 28px;
+        color: #6b7280;
+        margin-top: 8px;
+      }
+      /* Single line, clipped: a long footnote must not overlap the rows. */
+      #footnote {
+        margin-top: auto;
+        padding-top: 20px;
+        font-size: 26px;
+        color: #818999;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="pricing-sheet" data-start="0" data-duration="12" data-width="1920" data-height="1080">
+      <div id="panel">
+        <div id="title"></div>
+        <div id="rows"></div>
+        <div id="footnote"></div>
+      </div>
+    </div>
+
+    <script>
+      const COMPOSITION_ID = "pricing-sheet";
+      const MAX_ROWS = 8;
+
+      const params = new URLSearchParams(location.search);
+      document.getElementById("title").textContent = (params.get("title") || "LiveAvatar pricing").trim();
+      document.getElementById("footnote").textContent = (params.get("footnote") || "").trim();
+
+      // The row list is one JSON param. Anything malformed renders as an
+      // empty panel rather than throwing — a broken sheet must not take the
+      // player down with it.
+      let rows = [];
+      try {
+        const parsed = JSON.parse(params.get("rows") || "[]");
+        if (Array.isArray(parsed)) rows = parsed.slice(0, MAX_ROWS);
+      } catch {
+        /* empty list */
+      }
+
+      const rowsEl = document.getElementById("rows");
+      for (const item of rows) {
+        if (!item || typeof item.plan !== "string" || typeof item.price !== "string") continue;
+        const row = document.createElement("div");
+        row.className = "row";
+        const top = document.createElement("div");
+        top.className = "top";
+        const plan = document.createElement("div");
+        plan.className = "plan";
+        plan.textContent = item.plan.trim(); // textContent, never innerHTML
+        const price = document.createElement("div");
+        price.className = "price";
+        price.textContent = item.price.trim();
+        top.appendChild(plan);
+        top.appendChild(price);
+        row.appendChild(top);
+        const detail = typeof item.detail === "string" ? item.detail.trim() : "";
+        if (detail) {
+          const detailEl = document.createElement("div");
+          detailEl.className = "detail";
+          detailEl.textContent = detail;
+          row.appendChild(detailEl);
+        }
+        rowsEl.appendChild(row);
+      }
+
+      // Duration follows content: reading three plans takes longer than one.
+      // Written to data-duration before registration so the player reports
+      // the real length.
+      const DURATION = Math.min(24, 10 + rowsEl.children.length * 2);
+      document.getElementById("root").dataset.duration = String(DURATION);
+
+      const tl = gsap.timeline({ paused: true });
+      tl.from("#panel", { opacity: 0, y: 40, duration: 0.55, ease: "power3.out" }, 0)
+        .from("#title", { opacity: 0, y: 20, duration: 0.4, ease: "power2.out" }, 0.15);
+      if (rowsEl.children.length > 0) {
+        tl.from(
+          "#rows .row",
+          { opacity: 0, x: -40, duration: 0.4, ease: "power2.out", stagger: 0.15 },
+          0.3,
+        );
+      }
+      if (document.getElementById("footnote").textContent) {
+        tl.from("#footnote", { opacity: 0, duration: 0.4, ease: "power2.out" }, 1.0);
+      }
+      // Hold, then exit, ending exactly at DURATION.
+      tl.to("#panel", { opacity: 0, y: 24, duration: 0.5, ease: "power2.in" }, DURATION - 0.5);
+
+      // Registered synchronously — nothing async may run before this line.
+      window.__timelines = window.__timelines || {};
+      window.__timelines[COMPOSITION_ID] = tl;
+    </script>
+  </body>
+</html>

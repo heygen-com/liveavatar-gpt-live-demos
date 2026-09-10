@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>mode-comparison</title>
+    <!--
+      Hyperframes composition: FULL Mode vs Avatar Only, two cards side by
+      side. Both columns carry the same row labels in the same order, so the
+      eye can run down them and see which pieces LiveAvatar brings and which
+      ones the customer wires up — that contrast is the whole visual, which is
+      why an "excluded" row is styled, not omitted.
+
+      Content arrives in the query string: ?full=<JSON column>&lite=<JSON column>
+      (?headline= is accepted and ignored), where a column is {name, tagline, price, bestFor,
+      parts: [{label, value, included}]}. Parsed defensively and rendered with
+      textContent only.
+
+      Geometry: the cards stop at y=720 because the client parks the avatar in
+      the bottom-right quadrant (data-pip on #stage) while this plays — it
+      starts around y=762, x=1382.
+
+      The timeline is registered synchronously: the player probes for
+      window.__timelines on load and falls back to a degraded path if it is
+      not there yet, which is also why GSAP is vendored instead of fetched.
+    -->
+    <script src="./vendor/gsap.min.js"></script>
+    <style>
+      /* Palette lifted from liveavatar.com tokens: page #F7F8FA · pale
+         panel #DFF8FF · accent cyan #00C3FF · ink (eden) #0E404F · secondary
+         #6B7280 · muted #818999 · edge #E3E6E9 · chip #F2F4F6 */
+      html,
+      body {
+        margin: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        /* Transparent: the avatar's PiP video shows through at bottom-right.
+           color-scheme MUST match the host page's (light, web/index.html) —
+           a mismatch makes Chrome paint an opaque canvas behind the iframe. */
+        color-scheme: light;
+        background: transparent;
+        font-family: -apple-system, system-ui, "Helvetica Neue", sans-serif;
+      }
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+      }
+      /* Two standalone cards. They stop at y=720 so the PiP quadrant (from
+         y≈762) stays clear. */
+      #cards {
+        position: absolute;
+        left: 48px;
+        top: 40px;
+        width: 1824px;
+        height: 680px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 48px;
+      }
+      .card {
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        padding: 40px 44px;
+        border-radius: 30px;
+        background: #fff;
+        border: 2px solid #e3e6e9;
+        box-shadow: 0 24px 70px rgba(15, 44, 63, 0.35);
+      }
+      /* FULL is the batteries-included option: give it the cyan edge so the
+         two cards read as "complete" and "bring your own" at a glance. */
+      .card.full {
+        border-color: #00c3ff;
+      }
+      .name {
+        font-size: 40px;
+        font-weight: 700;
+        color: #0e404f;
+      }
+      .tagline {
+        font-size: 24px;
+        color: #6b7280;
+        margin-top: 6px;
+      }
+      .price {
+        font-size: 36px;
+        font-weight: 700;
+        color: #00c3ff;
+        margin-top: 14px;
+      }
+      .parts {
+        margin-top: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .part {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        height: 46px;
+        border-bottom: 1px solid #e3e6e9;
+      }
+      .mark {
+        flex: 0 0 26px;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 17px;
+        font-weight: 700;
+        line-height: 1;
+      }
+      .part.on .mark {
+        background: #00c3ff;
+        color: #fff;
+      }
+      .part.off .mark {
+        background: #f2f4f6;
+        color: #818999;
+      }
+      .label {
+        flex: 1 1 auto;
+        font-size: 25px;
+        color: #0e404f;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .value {
+        flex: 0 0 auto;
+        font-size: 23px;
+        color: #6b7280;
+        text-align: right;
+        max-width: 46%;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      /* Dimmed, not hidden: "you wire this up yourself" is the information. */
+      .part.off .label,
+      .part.off .value {
+        color: #818999;
+      }
+      .part.off .label {
+        opacity: 0.85;
+      }
+      .best {
+        margin-top: auto;
+        padding-top: 16px;
+        font-size: 24px;
+        color: #818999;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="mode-comparison" data-start="0" data-duration="16" data-width="1920" data-height="1080">
+      <div id="cards"></div>
+    </div>
+
+    <script>
+      const COMPOSITION_ID = "mode-comparison";
+      const MAX_PARTS = 7;
+
+      const params = new URLSearchParams(location.search);
+      // ?headline= is still accepted but not rendered — the two cards carry
+      // their own names, and the avatar says the framing line.
+
+      // Each column is one JSON param. Anything malformed yields an empty
+      // card rather than throwing — a broken panel must not take the player
+      // down with it.
+      const column = (key) => {
+        try {
+          const parsed = JSON.parse(params.get(key) || "null");
+          return parsed && typeof parsed === "object" ? parsed : null;
+        } catch {
+          return null;
+        }
+      };
+
+      const cardsEl = document.getElementById("cards");
+      let partRows = 0;
+
+      const addCard = (col, variant) => {
+        if (!col) return;
+        const card = document.createElement("div");
+        card.className = `card ${variant}`;
+
+        const name = document.createElement("div");
+        name.className = "name";
+        name.textContent = typeof col.name === "string" ? col.name.trim() : "";
+        card.appendChild(name);
+
+        const tagline = document.createElement("div");
+        tagline.className = "tagline";
+        tagline.textContent = typeof col.tagline === "string" ? col.tagline.trim() : "";
+        card.appendChild(tagline);
+
+        const price = document.createElement("div");
+        price.className = "price";
+        price.textContent = typeof col.price === "string" ? col.price.trim() : "";
+        card.appendChild(price);
+
+        const parts = document.createElement("div");
+        parts.className = "parts";
+        const list = Array.isArray(col.parts) ? col.parts.slice(0, MAX_PARTS) : [];
+        for (const item of list) {
+          if (!item || typeof item.label !== "string" || typeof item.value !== "string") continue;
+          const on = item.included === true;
+          const part = document.createElement("div");
+          part.className = `part ${on ? "on" : "off"}`;
+          const mark = document.createElement("div");
+          mark.className = "mark";
+          mark.textContent = on ? "✓" : "—"; // literal, so no innerHTML entity
+          const label = document.createElement("div");
+          label.className = "label";
+          label.textContent = item.label.trim(); // textContent, never innerHTML
+          const value = document.createElement("div");
+          value.className = "value";
+          value.textContent = item.value.trim();
+          part.appendChild(mark);
+          part.appendChild(label);
+          part.appendChild(value);
+          parts.appendChild(part);
+          partRows++;
+        }
+        card.appendChild(parts);
+
+        const best = document.createElement("div");
+        best.className = "best";
+        best.textContent = typeof col.bestFor === "string" ? col.bestFor.trim() : "";
+        card.appendChild(best);
+
+        cardsEl.appendChild(card);
+      };
+
+      addCard(column("full"), "full");
+      addCard(column("lite"), "lite");
+
+      // Duration follows content: two full columns take longer to read than
+      // one sparse one. Written to data-duration before registration so the
+      // player reports the real length.
+      const DURATION = Math.min(26, 12 + partRows);
+      document.getElementById("root").dataset.duration = String(DURATION);
+
+      const tl = gsap.timeline({ paused: true });
+      if (cardsEl.children.length > 0) {
+        tl.from(
+          "#cards .card",
+          { opacity: 0, y: 44, duration: 0.55, ease: "power3.out", stagger: 0.18 },
+          0,
+        );
+      }
+      if (partRows > 0) {
+        // Rows wipe in per card, so the eye reads down one column and then
+        // the other rather than across both at once.
+        tl.from(
+          "#cards .part",
+          { opacity: 0, x: -22, duration: 0.3, ease: "power2.out", stagger: 0.07 },
+          0.6,
+        );
+      }
+      // Hold, then exit, ending exactly at DURATION.
+      tl.to("#cards", { opacity: 0, y: 22, duration: 0.5, ease: "power2.in" }, DURATION - 0.5);
+
+      // Registered synchronously — nothing async may run before this line.
+      window.__timelines = window.__timelines || {};
+      window.__timelines[COMPOSITION_ID] = tl;
+    </script>
+  </body>
+</html>
